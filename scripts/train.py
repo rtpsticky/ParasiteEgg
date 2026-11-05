@@ -16,19 +16,26 @@ def main():
     ap.add_argument("--epochs", type=int, default=100)
     ap.add_argument("--imgsz", type=int, default=640)
     ap.add_argument("--batch", type=int, default=-1, help="-1 = auto (GPU only)")
-    ap.add_argument("--device", default=None, help="0, cpu, ... (default: auto)")
+    ap.add_argument("--device", default=None, help="0, cpu, mps (Apple Silicon), ... (default: auto)")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--name", default="parasite")
     ap.add_argument("--resume", action="store_true", help="resume runs/<name>/weights/last.pt")
     args = ap.parse_args()
 
-    if args.resume:
-        YOLO(f"runs/detect/{args.name}/weights/last.pt").train(resume=True)
-        return
-
     batch = args.batch
-    if batch == -1 and args.device == "cpu":
-        batch = 8  # auto-batch needs CUDA
+    if batch == -1 and args.device in ("cpu", "mps"):
+        batch = 8 if args.device == "cpu" else 16  # auto-batch needs CUDA
+
+    if args.resume:
+        # device/batch/workers may differ from the original run, e.g. resume a
+        # Colab GPU checkpoint on a local CPU (ultralytics allows these overrides).
+        over = {"workers": args.workers}
+        if args.device is not None:
+            over["device"] = args.device
+        if batch != -1:
+            over["batch"] = batch
+        YOLO(f"runs/detect/{args.name}/weights/last.pt").train(resume=True, **over)
+        return
 
     YOLO(args.model).train(
         data=args.data,
